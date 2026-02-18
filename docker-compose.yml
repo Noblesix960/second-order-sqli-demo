@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: vulnerable_app
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 5s
+      retries: 10
+
+  victim:
+    build: ./victim
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: rootpassword
+      DB_NAME: vulnerable_app
+
+  attacker:
+    build: ./attacker
+    depends_on:
+      - victim
+    stdin_open: true
+    tty: true
+
+  sniffer:
+    image: nicolaka/netshoot
+    network_mode: "service:victim"
+    cap_add:
+      - NET_ADMIN
+    command: "tcpdump -i eth0 -A -s 0 -n -l 'tcp port 8080'"
